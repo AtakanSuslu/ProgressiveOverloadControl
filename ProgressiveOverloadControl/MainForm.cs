@@ -112,36 +112,29 @@ namespace ProgressiveOverloadControl
                 _log.Add(ToSetEntry(e));
         }
         private readonly Dictionary<string, ExerciseProfile> _profiles = new(StringComparer.OrdinalIgnoreCase);
-        private void SeedExampleData()
-        {
-            var b = DateTime.Today;
-            _log.Add(new SetEntry(b.AddDays(-14), "Back Squat", 1, 12, 60, 2));
-            _log.Add(new SetEntry(b.AddDays(-14), "Back Squat", 2, 12, 60, 1));
-            _log.Add(new SetEntry(b.AddDays(-7), "Back Squat", 1, 12, 65, 2));
-            _log.Add(new SetEntry(b.AddDays(-7), "Back Squat", 2, 12, 65, 1));
-            _log.Add(new SetEntry(b, "Back Squat", 1, 12, 66, 2));
-            _log.Add(new SetEntry(b, "Back Squat", 2, 12, 66, 1));
-            _log.Add(new SetEntry(b.AddDays(-12), "Bench Press", 1, 12, 40, 2));
-            _log.Add(new SetEntry(b.AddDays(-12), "Bench Press", 2, 12, 40, 1));
-            _log.Add(new SetEntry(b.AddDays(-7), "Deadlift", 1, 8, 82.5, 2));
-            _log.Add(new SetEntry(b.AddDays(-7), "Deadlift", 2, 8, 82.5, 1));
-            _log.Add(new SetEntry(b.AddDays(-5), "Lat Pulldown", 1, 12, 55, 2));
-            _log.Add(new SetEntry(b.AddDays(-5), "Lat Pulldown", 2, 12, 55, 1));
-        }
 
         private void AddEntry()
         {
             try
             {
-                if (!int.TryParse(txtSet.Text, out int setNo) || setNo <= 0) { MessageBox.Show("Set sayı geçersiz."); return; }
+                // Girdiler
+                if (!int.TryParse(txtSet.Text, out int setVal) || setVal <= 0) { MessageBox.Show("Set sayısı/geçerli set değeri girin."); return; }
                 if (!int.TryParse(txtRep.Text, out int reps) || reps <= 0) { MessageBox.Show("Tekrar geçersiz."); return; }
-                if (!double.TryParse(txtKg.Text, out double kg) || kg <= 0) { MessageBox.Show("Kg geçersiz."); return; }
+
+                // Virgül/nokta farklarını tolere etmek istersen:
+                if (!(double.TryParse(txtKg.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out double kg) ||
+                      double.TryParse(txtKg.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out kg)) || kg <= 0)
+                {
+                    MessageBox.Show("Kg geçersiz."); return;
+                }
+
                 int? rir = null;
                 if (!string.IsNullOrWhiteSpace(txtRir.Text))
                 {
                     if (!int.TryParse(txtRir.Text, out var rirVal) || rirVal < 0 || rirVal > 6) { MessageBox.Show("RIR 0–6 arası olmalı."); return; }
                     rir = rirVal;
                 }
+
                 var exName = (cmbExInput.Text ?? "").Trim();
                 if (string.IsNullOrWhiteSpace(exName))
                 {
@@ -150,25 +143,57 @@ namespace ProgressiveOverloadControl
                 if (!_profiles.ContainsKey(exName))
                     _profiles[exName] = GuessProfileFor(exName);
 
-                // Kullanıcı katalogda olmayan bir isim yazdıysa, gelecekte hızlı seçim için kataloğa ekle
+                // Kataloga yoksa ekle
                 if (!cmbExInput.Items.Cast<string>().Any(i => i.Equals(exName, StringComparison.OrdinalIgnoreCase)))
                     cmbExInput.Items.Add(exName);
 
-                var entity = ToEntity(new SetEntry(dtpDate.Value.Date, exName, setNo, reps, kg, rir));
-                _db!.SetLogs.Add(entity);
-                _db.SaveChanges(); // Id üretilir
+                var date = dtpDate.Value.Date;
 
-                _log.Add(new SetEntry(dtpDate.Value.Date, exName, setNo, reps, kg, rir));
+                // Çoklu set senaryosu mu?
+                bool multi = chkSameAllSets.Checked;
+                int count = multi ? setVal : 1;
+
+                // O gün/o egzersiz için mevcut en büyük SetNo'yu bul → devam numaralandır
+                int existingMaxSetNo = _log
+                    .Where(x => x.Date == date && x.Exercise.Equals(exName, StringComparison.OrdinalIgnoreCase))
+                    .Select(x => x.SetNo)
+                    .DefaultIfEmpty(0)
+                    .Max();
+
+                // DB toplu ekleme için buffer
+                var toAdd = new List<SetEntry>(capacity: count);
+
+                for (int i = 0; i < count; i++)
+                {
+                    int setNo = multi ? (existingMaxSetNo + 1 + i) : setVal; // multi: 1..N devam; tek: girilen setNo
+                    var entry = new SetEntry(date, exName, setNo, reps, kg, rir);
+                    toAdd.Add(entry);
+                }
+
+                // DB'ye yaz (varsa)
+                if (_db != null)
+                {
+                    foreach (var e in toAdd)
+                        _db.SetLogs.Add(ToEntity(e));
+                    _db.SaveChanges();
+                }
+
+                // UI listesine ekle
+                foreach (var e in toAdd)
+                    _log.Add(e);
+
                 Recalculate();
 
                 // giriş temizliği
-                txtSet.Clear(); txtRep.Clear(); txtKg.Clear(); txtRir.Clear();
+                if (multi) txtSet.Clear();
+                txtRep.Clear(); txtKg.Clear(); txtRir.Clear();
             }
             catch (Exception ex)
             {
                 MessageBox.Show("Hata: " + ex.Message);
             }
         }
+
 
         private void DeleteSelected()
         {

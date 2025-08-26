@@ -18,6 +18,7 @@ namespace ProgressiveOverloadControl
         private ComboBox cmbExerciseForChart;
         private ComboBox cmbMetric;
         private ComboBox cmbExInput;
+        private CheckBox chkSameAllSets;
 
         private void InitializeComponent()
         {
@@ -83,6 +84,15 @@ namespace ProgressiveOverloadControl
                 AutoCompleteSource = AutoCompleteSource.ListItems
             };
 
+            this.chkSameAllSets = new CheckBox
+            {
+                Text = "Aynı değerle x set ekle",
+                AutoSize = true,
+                Margin = m,
+                Checked = false // varsayılan kapalı
+            };
+
+
             var lblSet = new Label { Text = "Set", AutoSize = true, Margin = m };
             this.txtSet.Width = 50; this.txtSet.Margin = m; this.txtSet.PlaceholderText = "Set";
 
@@ -107,7 +117,7 @@ namespace ProgressiveOverloadControl
 
     // Egzersiz alanı doğru sırayla
     lblEx, cmbExInput,
-
+    chkSameAllSets,
     lblSet, txtSet,
     lblRep, txtRep,
     lblKg, txtKg,
